@@ -4,19 +4,20 @@ from typing_extensions import ParamSpecArgs
 import numpy as np
 import pandas as pd
 import scanpy as sc
-
+import cProfile
 import time
 import sys
 import argparse
 
 # %%
+
 sc.settings.verbosity = 3             # verbosity: errors (0), warnings (1), info (2), hints (3)
 sc.logging.print_header()
 sc.settings.set_figure_params(dpi=80, facecolor='white')
 # sc.settings.n_jobs = int(sys.argv[4])
-sc.settings.n_jobs = 1
+#sc.settings.n_jobs = 1
 
-print(f"using {sc.settings.n_jobs} threads")
+#print(f"using {sc.settings.n_jobs} threads")
 
 # %%
 parser = argparse.ArgumentParser(description='Process arguments.')
@@ -32,10 +33,14 @@ dataset = args.data_set
 outdir = args.out_dir if args.out_dir.endswith('/') else args.out_dir + '/'
 nthreads = args.num_threads
 
+sc.settings.n_jobs = nthreads
+print(f"using {sc.settings.n_jobs} threads")
 
 #%%
 
 # I/O
+start = time.time()
+
 results_file = "/".join([outdir, dataset + '.scanpy.h5ad'])  # the file that will store the analysis results
 
 adata = sc.read_10x_mtx(
@@ -46,13 +51,19 @@ adata = sc.read_10x_mtx(
 
 adata.var_names_make_unique()  # this is unnecessary if using `var_names='gene_ids'` in `sc.read_10x_mtx`
 
+print(f"I/O: {time.time() - start:.4f} seconds")
+
 
 # %%
 # preprocessing
+start = time.time()
 
 # basic filtering
 sc.pp.filter_cells(adata, min_genes=200)
 sc.pp.filter_genes(adata, min_cells=3)
+
+print(f"Filtering: {time.time() - start:.4f} seconds")
+
 
 #%%
 # metric
@@ -62,14 +73,17 @@ sc.pp.filter_genes(adata, min_cells=3)
 # filtering by slicing the AnnData object
 #adata = adata[adata.obs.n_genes_by_counts < 2500, :]
 #adata = adata[adata.obs.pct_counts_mt < 5, :]
-
+start = time.time()
 
 # and normalize to 10K reads per cell
 sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
 
+print(f"Normalization: {time.time() - start:.4f} seconds")
+
 
 # %%
+start = time.time()
 # highly variable genes
 
 #sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=3, min_disp=0.5)
@@ -80,30 +94,46 @@ adata.raw = adata
 
 # filtering by highly variable genes.
 adata = adata[:, adata.var.highly_variable]
+print(f"Highly variable genes: {time.time() - start:.4f} seconds")
 
 
 #%%
+start = time.time()
+
 # regres out effects of total counts per cell an d% mitochondrial genes
 #sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
 sc.pp.scale(adata)
+print(f"Scaling: {time.time() - start:.4f} seconds")
+
 
 # %%
+start = time.time()
+
 # report adata - so we can check ot see if we are comparable to Seurat
 # adata.write(results_file)
 # adata
 
 # %%
+
+start = time.time()
 # pca.  parallel via OMP_NUM_THREADS
 sc.tl.pca(adata, svd_solver='arpack', n_comps=30)
+print(f"PCA: {time.time() - start:.4f} seconds")
 
 # adata.write(results_file)
 # adata
 
 # %%
+start = time.time()
+
 # neighborhood graph
 sc.pp.neighbors(adata, n_pcs=30)
 
+print(f"Neighbors: {time.time() - start:.4f} seconds")
+
 # %% 
+start = time.time()
+
 # for fixing disconnected clusters or connectivity issues:
 #sc.tl.paga(adata)
 #sc.pl.paga(adata, plot=False)  # remove `plot=False` if you want to see the coarse-grained graph
@@ -112,25 +142,38 @@ sc.pp.neighbors(adata, n_pcs=30)
 
 # adata.write(results_file)
 # adata
+print(f"PAGA section: {time.time() - start:.4f} seconds")
 
 
 # %%
+start = time.time()
 # clustering  (currently uses leiden,  previously using louvain (like Seurat).)
 #sc.tl.leiden(adata)
 sc.tl.louvain(adata, resolution = 0.5)
 
+print(f"Louvain clustering: {time.time() - start:.4f} seconds")
 
 #%%
+start = time.time()
+
 # umap
 sc.tl.umap(adata, n_components=30)
 
+print(f"UMAP: {time.time() - start:.4f} seconds")
+
 #%%
+start = time.time()
+
 adata.write(results_file)
 adata
+print(f"Write output: {time.time() - start:.4f} seconds")
 
 # %%
+start = time.time()
+
 # support t-test, wilcoxon, logistic regression
 # find marker genes
-sc.tl.rank_genes_groups(adata, 'louvain', method='wilcoxon', use_raw=True)
-
-
+cProfile.run(
+    "sc.tl.rank_genes_groups(adata, 'louvain', method='wilcoxon', use_raw=True)"
+)
+print(f"Rank genes: {time.time() - start:.4f} seconds")
