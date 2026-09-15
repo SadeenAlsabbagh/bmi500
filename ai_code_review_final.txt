@@ -1,0 +1,177 @@
+AI CODE REVIEW
+==============
+
+LLM / Coding Assistant Used:
+Claude
+
+Model / Version:
+Claude Sonnet 4.6
+
+Prompt:
+Perform a code review of matvec_multiply.py. Assess correctness, code design,
+readability, unnecessary complexity, edge cases and failure modes, error
+handling, test coverage, documentation, and possible improvements. Provide
+specific findings and prioritize recommendations by severity.
+
+CODE REVIEW: matvec_multiply.py
+===============================
+File: matvec_multiply.py
+Functions reviewed: dot_product(), matrix_vector_product(), main()
+Date: 2026-09-15
+
+------------------------------------------------------------
+
+CORRECTNESS
+-----------
+The core mathematics is correct. The dot_product() function computes the
+dot product of two equal-length vectors, and matrix_vector_product() correctly
+applies dot_product() to each matrix row.
+
+------------------------------------------------------------
+
+ERROR HANDLING
+--------------
+The implementation includes useful checks for empty inputs, mismatched
+dimensions, malformed rows, and non-numeric values.
+
+One concern is that element type checking occurs inside the dot-product loop:
+
+    for i in range(len(vector_a)):
+        if not isinstance(vector_a[i], (int, float)) or not isinstance(
+            vector_b[i], (int, float)
+        ):
+            raise TypeError("Vector elements must be numeric.")
+
+For large inputs, this performs many repeated runtime type checks.
+
+RECOMMENDATION:
+If explicit validation is required, validate the input values once before the
+main arithmetic loop or place validation in a small helper function.
+
+Example:
+
+    def _validate_numeric_list(v, name):
+        if not isinstance(v, list) or not v:
+            raise ValueError(f"{name} must be a non-empty list.")
+        if not all(isinstance(x, (int, float)) for x in v):
+            raise TypeError(f"{name} elements must be numeric.")
+
+------------------------------------------------------------
+
+CODE DESIGN
+-----------
+- matrix_vector_product() appropriately reuses dot_product(), which keeps the
+  implementation modular.
+- Some validation logic is repeated between functions.
+- Restricting inputs to Python lists is acceptable for the assignment, although
+  a more general utility could support other iterable types.
+
+RECOMMENDATION:
+Keep the current function separation, but consider consolidating repeated
+validation logic if the code is expanded later.
+
+------------------------------------------------------------
+
+READABILITY
+-----------
+The code is generally clear and easy to follow. Variable and function names are
+descriptive, and comments explain the purpose of the major sections.
+
+The assignment explicitly requested a for-loop implementation of dot_product(),
+so the current indexed loop is appropriate for the assignment requirements.
+
+In a production implementation without that restriction, zip() could offer a
+more concise alternative.
+
+------------------------------------------------------------
+
+UNNECESSARY COMPLEXITY
+----------------------
+The implementation is straightforward and not overly complex for the assignment.
+
+The main possible source of unnecessary overhead is repeated runtime type
+checking inside the inner dot-product loop. For a 1000 x 1000 matrix, this can
+result in a large number of type checks.
+
+RECOMMENDATION:
+Move validation outside the arithmetic loop if performance becomes important.
+
+------------------------------------------------------------
+
+EDGE CASES AND FAILURE MODES
+----------------------------
+Case                         | Handled? | Notes
+-----------------------------|----------|---------------------------------------
+Empty vectors                | Yes      | Raises ValueError
+Mismatched vector lengths    | Yes      | Raises ValueError
+Non-numeric elements         | Yes      | Raises TypeError
+Empty matrix                 | Yes      | Raises ValueError
+Non-list matrix              | Yes      | Raises TypeError
+Non-rectangular matrix       | Yes      | Detected by row-length validation
+Matrix/vector mismatch       | Yes      | Raises ValueError
+NaN / infinity inputs        | No       | Values would propagate numerically
+Large integer values         | Yes      | Python integers expand automatically
+
+RECOMMENDATION:
+If the function is intended for numerical pipelines where NaN or infinity values
+are invalid, add explicit checks or document that these values are allowed to
+propagate.
+
+------------------------------------------------------------
+
+TEST COVERAGE
+-------------
+A separate unittest-based test suite is present in matvec_tests.py.
+
+The current tests cover:
+- basic dot-product calculations
+- negative values
+- floating-point values
+- mismatched vector lengths
+- empty vectors
+- non-numeric vector elements
+- basic matrix-vector multiplication
+- identity-matrix behavior
+- dimension mismatches
+- empty matrices
+- invalid matrix types
+- non-numeric matrix values
+
+The existing test suite provides good coverage of both normal behavior and
+important failure cases.
+
+Possible improvements:
+- Add a single-element vector test.
+- Add explicit NaN and infinity behavior tests if those inputs matter.
+- Add a randomized correctness test against a trusted reference implementation.
+
+------------------------------------------------------------
+
+DOCUMENTATION
+-------------
+The code contains useful comments, but the functions do not use Python
+docstrings.
+
+RECOMMENDATION:
+Add docstrings so IDEs, help(), and documentation tools can display function
+descriptions.
+
+Example:
+
+    def dot_product(vector_a, vector_b):
+        """Return the dot product of two equal-length numeric lists."""
+
+------------------------------------------------------------
+
+SUMMARY OF RECOMMENDATIONS
+--------------------------
+Priority | Recommendation
+---------|---------------------------------------------------------------
+HIGH     | Move repeated element type checking outside the inner loop
+MEDIUM   | Add docstrings to public functions
+MEDIUM   | Expand tests for NaN/inf and additional edge cases if relevant
+LOW      | Consider consolidating repeated validation logic
+LOW      | Consider supporting more iterable types in a future general utility
+
+------------------------------------------------------------
+END OF REVIEW
